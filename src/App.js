@@ -1,64 +1,58 @@
-import React from 'react';
-import {BrowserRouter,Switch,Route} from 'react-router-dom'
-import HomePage from'./pages/homepage/homepage.component';
-import ShopPage from './pages/shoppage/shopPage.component'
-import SignInAndSignUpPage from './pages/sign-in-and-sign-up/signin-and-signup.component'
-import Header from './components/header/header.component';
-import {auth,createUserProfileDocument} from './firebase/firebase.utils';
-import './App.css';
+import React, { useEffect, lazy, Suspense } from "react";
+import { Route, Switch, Redirect } from "react-router-dom";
+import { connect } from "react-redux";
+import { createStructuredSelector } from "reselect";
+import { GlobalStyle } from "./global.styles";
+import Header from "./components/header/header.component";
+import Spinner from "./components/spinner/spinner.component";
+import { selectCurrentUser } from "./redux/user/user-selectors";
+import { checkUserSession } from "./redux/user/user-actions";
+import ErrorBounday from "./components/error-boundary/error-boundary.component";
 
-class App extends React.Component {
-  constructor() {
-    super();
+const HomePage = lazy(() => import("./pages/homepage/homepage.component"));
+const ShopPage = lazy(() => import("./pages/shop/shop.component"));
+const CheckoutPage = lazy(() => import("./pages/checkout/checkout.component"));
+const SignInAndSignUpPage = lazy(() =>
+  import("./pages/sign-in-and-sign-out/sign-in-and-sign-out.component")
+);
 
-    this.state = {
-      currentUser:null
-    };
-  }
+//want <Header> component to be present on every page, so put it out of the <Switch><Route>
+const App = ({ checkUserSession, currentUser }) => {
+  useEffect(() => {
+    checkUserSession();
+  }, [checkUserSession]);
 
-  unsubscribeFromAuth = null;
+  return (
+    <div>
+      <GlobalStyle />
+      <Header />
+      <Switch>
+        <ErrorBounday>
+          <Suspense fallback={<Spinner />}>
+            <Route exact path="/" component={HomePage} />
+            <Route path="/shop" component={ShopPage} />
+            <Route exact path="/checkout" component={CheckoutPage} />
+            <Route
+              exact
+              path="/signin"
+              render={() =>
+                currentUser ? <Redirect to="/" /> : <SignInAndSignUpPage />
+              }
+            />
+          </Suspense>
+        </ErrorBounday>
+      </Switch>
+    </div>
+  );
+};
 
-  componentDidMount(){
-    this.unsubscribeFromAuth = auth.onAuthStateChanged(async userAuth => {
-      if (userAuth) {
-        const userRef = await createUserProfileDocument(userAuth);
+//using selector:
+const mapStateToProps = createStructuredSelector({
+  currentUser: selectCurrentUser
+});
 
-        userRef.onSnapshot(snapShot => {
-          this.setState({
-            currentUser: {
-              id: snapShot.id,
-              ...snapShot.data()
-            }
-          });
+const mapDispatchToProps = dispatch => ({
+  checkUserSession: () => dispatch(checkUserSession())
+});
 
-          console.log(this.state);
-        });
-      }
-
-      this.setState({ currentUser: userAuth });
-    });
-  }
-
-  
-  componentWillUnmount(){
-    this.unsubscribeFromAuth();
-  }
-
-  render() {
-    return (
-      <div>
-
-        <BrowserRouter>
-          <Header currentUser={this.state.currentUser}  />
-          <Switch>
-            <Route exact path='/' component={HomePage} />
-            <Route path='/shop' component={ShopPage} />
-            <Route path='/signin' component={SignInAndSignUpPage} />
-          </Switch>
-        </BrowserRouter>
-      </div>
-    );
-  }
-}
-
-export default App;
+export default connect(mapStateToProps, mapDispatchToProps)(App);
